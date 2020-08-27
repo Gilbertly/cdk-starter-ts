@@ -1,0 +1,150 @@
+version: 2
+orbs:
+  codecov: codecov/codecov@1.0.5
+refs:
+  container_config: &container_config
+    docker:
+      - image: circleci/node:12
+    working_directory: ~/app
+  steps:
+    - &install_dependencies
+      run:
+        name: Install Dependencies
+        command: npm install
+    - &save_cache
+      save_cache:
+        paths:
+          - node_modules
+        key: v1-dependencies-{{ checksum "package.json" }}
+    - &restore_cache
+      restore_cache:
+        keys:
+          - v1-dependencies-{{ checksum "package.json" }}
+          - v1-dependencies-
+    - &persist_to_workspace
+      persist_to_workspace:
+        root: ./
+        paths:
+          - ./
+    - &attach_workspace
+      attach_workspace:
+        at: ~/app
+    - &semantic_release
+      run:
+        name: Semantic Release
+        command: |
+          export NPM_TOKEN=${NPM_TOKEN}
+          export GH_TOKEN=${GH_TOKEN}
+          export GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
+          export GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
+          export GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME}
+          export GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL}
+          npx semantic-release
+    - &upload_coverage
+      run:
+        name: Upload Tests' Coverage
+        codecov/upload:
+          conf: ./codecov.yml
+          token: ${CODECOV_TOKEN}
+    - &configure_aws
+      run:
+        name: Configure AWS CLI & AWS CDK
+        command: |
+          mkdir ~/.aws && touch ~/.aws/credentials
+          echo "[default]" >> ~/.aws/credentials
+          echo "aws_access_key_id = $AWS_ACCESS_KEY_ID" >> ~/.aws/credentials
+          echo "aws_secret_access_key = $AWS_SECRET_ACCESS_KEY" >> ~/.aws/credentials
+          echo "region = $AWS_DEFAULT_REGION" >> ~/.aws/credentials
+          export CDK_DEFAULT_ACCOUNT=$AWS_DEV_ACCOUNT
+          export CDK_DEFAULT_REGION=$AWS_DEFAULT_REGION
+    - &cdk_diff_changes
+      run:
+        name: AWS CDK Diff Pull-Request Changes
+        command: |
+          ./node_modules/.bin/cdk doctor
+          ./node_modules/.bin/cdk diff
+          if [ -n "$CIRCLE_PULL_REQUEST" ]; then
+              export ENV=dev
+              if [ "$CIRCLE_BRANCH" == "develop" ]; then
+                export ENV=prod
+              fi
+              pr_number=${"$CIRCLE_PULL_REQUEST##*/"}
+              block='```'
+              diff=$(echo -e "./node_modules/.bin/cdk diff (env=${ENV})\n${block}\n$(npm run --silent ci_diff)\n${block}")
+              data=$(jq -n --arg body "$diff" '{ body: $body}') # escape
+              curl -X POST -H 'Content-Type:application/json' \
+                -H "Accept: application/vnd.github.v3+json" \
+                -H "Authorization: token $GITHUB_TOKEN" \
+                -d "$data" \
+                "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/issues/${pr_number}/comments"
+            fi
+    - &ecr_retag_image
+      run:
+        name: AWS ECR Retag Docker Image
+        command: |
+          MANIFEST=$(aws ecr batch-get-image --repository-name gilbertly/ecs-starter --image-ids imageTag=latest --query 'images[].imageManifest' --output text)
+          IMAGE_TAG=$(echo $CIRCLE_SHA1 | cut -c1-7)
+          aws ecr put-image --repository-name gilbertly/ecs-starter --image-tag "$IMAGE_TAG" --image-manifest "$MANIFEST"
+
+jobs:
+  build:
+    <<: *container_config
+    steps:
+      - checkout
+      - *install_dependencies
+      - *save_cache
+      - *restore_cache
+      - *persist_to_workspace
+
+  deploy_dev:
+    <<: *container_config
+    steps:
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - *attach_workspace
+      - *configure_aws
+      - *cdk_diff_changes
+      - run:
+          name: AWS CDK Deploy Dev
+          command: ENV=dev npm run ci_deploy
+      - *ecr_retag_image
+      - *semantic_release
+      - *upload_coverage
+
+  deploy_prod:
+    <<: *container_config
+    steps:
+      - *attach_workspace
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - *attach_workspace
+      - *configure_aws
+      - *cdk_diff_changes
+      - run:
+          name: AWS CDK Deploy Prod
+          command: ENV=prod npm run ci_deploy
+      - *ecr_retag_image
+      - *semantic_release
+      - *upload_coverage
+
+workflows:
+  version: 2
+  build_and_deploy:
+    jobs:
+      - build
+      - deploy_dev:
+          filters:
+            branches:
+              only:
+                - develop
+          requires:
+            - build
+          context: ecs-starter-ts-dev
+      - deploy_prod:
+          filters:
+            branches:
+              only:
+                - master
+          requires:
+            - build
+          context: ecs-starter-ts-prod
