@@ -99,8 +99,6 @@ jobs:
   deploy_dev:
     <<: *container_config
     steps:
-      - setup_remote_docker:
-          docker_layer_caching: true
       - *attach_workspace
       - *configure_aws
       - *cdk_diff_changes
@@ -114,9 +112,6 @@ jobs:
   deploy_prod:
     <<: *container_config
     steps:
-      - *attach_workspace
-      - setup_remote_docker:
-          docker_layer_caching: true
       - *attach_workspace
       - *configure_aws
       - *cdk_diff_changes

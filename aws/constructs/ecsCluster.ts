@@ -28,7 +28,8 @@ export class MainEcsCluster extends cdk.Construct {
 
     const mainCluster = new ecs.Cluster(this, 'mainCluster', {
       clusterName: props.clusterName,
-      vpc: mainClusterVpc
+      vpc: mainClusterVpc,
+      containerInsights: true
     })
 
     const taskDefinition = new ecs.FargateTaskDefinition(this, 'mainTaskDefinition', {

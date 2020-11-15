@@ -6,7 +6,21 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "cdk:deploy": "cdk deploy -c env=${ENV:-dev} --require-approval never"
+    "lint:fix": "eslint './src/**/*.{ts,tsx}' --fix",
+    "lint:test": "npm run lint:fix && jest",
+    "layer:prepare": "rimraf -f ./nodejs dependencies.zip && npm run layer:install && npm run layer:zip",
+    "layer:install": "mkdir -p ./nodejs && cp package.json ./nodejs && cd ./nodejs && npm i --only=prod",
+    "layer:zip": "zip -qr dependencies.zip nodejs && rimraf -f ./nodejs",
+    "clean:build": "rimraf -f build && npm run build && npm run layer:prepare",
+    "validate:sls": "sls deploy --stage dev --noDeploy",
+    "validate:all": "npm run lint:test && npm run clean:build",
+    "deploy:dev": "npm run validate:all && sls deploy --stage dev",
+    "deploy:prod": "npm run validate:all && sls deploy --stage prod",
+    "ddb:install": "sls dynamodb install",
+    "ddb:start": "sls dynamodb start --migrate",
+    "ssm:download": "ts-node ./src/utils/cli.ts ssmDownload",
+    "ssm:update": "ts-node ./src/utils/cli.ts ssmUpdate",
+    "ssm:delete": "ts-node ./src/utils/cli.ts ssmDelete"
   },
   "repository": {
     "type": "git",
@@ -14,17 +28,51 @@
   },
   "author": "Gilbert Gathara",
   "license": "MIT",
+  "husky": {
+    "hooks": {
+      "pre-commit": "npm run lint:test",
+      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
+    }
+  },
   "dependencies": {
-    "@aws-cdk/aws-ec2": "^1.61.0",
-    "@aws-cdk/aws-ecr-assets": "^1.61.0",
-    "@aws-cdk/aws-ecs": "^1.61.0",
-    "@aws-cdk/aws-events": "^1.61.0",
-    "@aws-cdk/aws-events-targets": "^1.61.0",
-    "@aws-cdk/aws-iam": "^1.61.0",
-    "@aws-cdk/core": "^1.61.0"
+    "@sentry/node": "^5.27.4",
+    "aws-sdk": "^2.792.0"
   },
   "devDependencies": {
-    "@types/node": "^14.6.1",
-    "ts-node": "^9.0.0"
+    "@commitlint/cli": "^11.0.0",
+    "@commitlint/config-conventional": "^11.0.0",
+    "@semantic-release/changelog": "^5.0.1",
+    "@semantic-release/git": "^9.0.0",
+    "@semantic-release/github": "^7.1.2",
+    "@types/aws-lambda": "^8.10.64",
+    "@types/jest": "^26.0.15",
+    "@types/node": "^14.14.7",
+    "@types/ora": "^3.2.0",
+    "@types/webpack": "^4.41.25",
+    "@types/yargs": "^15.0.9",
+    "@typescript-eslint/eslint-plugin": "^4.7.0",
+    "@typescript-eslint/parser": "^4.7.0",
+    "aws-lambda": "^1.0.6",
+    "eslint": "^7.13.0",
+    "eslint-config-prettier": "^6.15.0",
+    "eslint-plugin-prettier": "^3.1.4",
+    "husky": "^4.3.0",
+    "jest": "^26.6.3",
+    "ora": "^5.1.0",
+    "prettier": "^2.1.2",
+    "rimraf": "^3.0.2",
+    "semantic-release": "^17.2.2",
+    "serverless": "^2.11.1",
+    "serverless-iam-roles-per-function": "^2.0.2",
+    "serverless-prune-plugin": "^1.4.3",
+    "serverless-pseudo-parameters": "^2.5.0",
+    "serverless-webpack": "^5.3.5",
+    "ts-jest": "^26.4.4",
+    "ts-loader": "^8.0.11",
+    "ts-node": "^9.0.0",
+    "typescript": "^4.0.5",
+    "webpack": "^5.4.0",
+    "webpack-node-externals": "^2.5.2",
+    "yargs": "^16.1.0"
   }
 }
