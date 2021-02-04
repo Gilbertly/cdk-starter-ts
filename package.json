@@ -1,5 +1,5 @@
 {
-  "name": "ecs-starter-ts",
+  "name": "cdk-starter-ts",
   "version": "0.0.1",
   "description": "Starterkit for containerized Typescript applications.",
   "main": "index.js",
@@ -24,7 +24,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git@personal:gilbertly/ecs-starter-ts"
+    "url": "git@personal:gilbertly/cdk-starter-ts"
   },
   "author": "Gilbert Gathara",
   "license": "MIT",
