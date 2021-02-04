@@ -134,7 +134,7 @@ workflows:
                 - develop
           requires:
             - build
-          context: ecs-starter-ts-dev
+          context: cdk-starter-ts-dev
       - deploy_prod:
           filters:
             branches:
@@ -142,4 +142,4 @@ workflows:
                 - master
           requires:
             - build
-          context: ecs-starter-ts-prod
+          context: cdk-starter-ts-prod
